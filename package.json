@@ -1,0 +1,60 @@
+{
+  "name": "lover-our-story",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build && node --experimental-strip-types scripts/check-build-secrets.ts && node --experimental-strip-types scripts/write-hosting-headers.ts",
+    "check:build": "node --experimental-strip-types scripts/check-build-secrets.ts",
+    "test:performance": "node scripts/run-performance.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "test": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:edge": "deno test --allow-env --allow-net --allow-read=node_modules,supabase/functions supabase/functions/tests",
+    "test:e2e": "playwright test",
+    "operator:provision": "node --experimental-strip-types scripts/provision-user.ts",
+    "test:image-runtime": "node --experimental-strip-types scripts/check-image-runtime.mjs"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
+    "@supabase/supabase-js": "2.119.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@imagemagick/magick-wasm": "0.0.46",
+    "@playwright/test": "1.65.0",
+    "@tailwindcss/vite": "4.3.5",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "deno": "2.9.6",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
+    "imagescript": "3.13.1",
+    "jsdom": "31.0.0",
+    "supabase": "3.0.0",
+    "tailwindcss": "4.3.5",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  },
+  "overrides": {
+    "minimatch": "11.0.1"
+  }
+}

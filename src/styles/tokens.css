@@ -1,0 +1,12 @@
+:root { --lover-cream:#fffaf3; --lover-pink:#fce7ef; --lover-ink:#462c36; --lover-accent:#9d365e; --lover-border:#f5dce5; }
+html { color-scheme:light; }
+body { background:var(--lover-cream); color:var(--lover-ink); }
+button,a,summary { touch-action:manipulation; }
+button,a,input,textarea,select,summary { transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease; }
+button:focus-visible,a:focus-visible,summary:focus-visible { outline:3px solid #9d174d;outline-offset:3px; }
+nav a { padding:8px 10px;border:1px solid var(--lover-border);border-radius:12px;background:white; }
+nav a:hover,button:hover:not(:disabled) { background-color:var(--lover-pink);color:var(--lover-ink); }
+input[type=checkbox],input[type=radio] { width:1.2rem;height:1.2rem;accent-color:var(--lover-accent); }
+article,section,form { min-width:0; }
+h1,h2,p,summary,a { overflow-wrap:anywhere; }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; } }

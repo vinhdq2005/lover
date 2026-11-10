@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Local image preparation test</title></head>
+  <body>
+    <script type="module">
+      // Loaded by Chromium through Vite's client ESM pipeline, never Vitest SSR.
+      import { prepareImage } from "/src/lib/prepareImage.ts";
+      window.__loverPrepareImage = prepareImage;
+    </script>
+  </body>
+</html>

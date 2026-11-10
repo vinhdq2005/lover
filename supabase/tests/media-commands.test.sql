@@ -1,0 +1,48 @@
+begin;
+truncate public.couples,public.profiles,public.operation_receipts cascade;
+set local search_path=public,extensions;select no_plan();
+insert into auth.users(id,email,email_confirmed_at) values('00000000-0000-4000-8000-000000000051','media-command-first@example.test',now()),('00000000-0000-4000-8000-000000000052','media-command-partner@example.test',now());
+insert into public.profiles(user_id,display_name) values('00000000-0000-4000-8000-000000000051','First'),('00000000-0000-4000-8000-000000000052','Partner');
+insert into public.couples(id,name,start_date) values('10000000-0000-4000-8000-000000000051','Test','2024-01-01');
+insert into public.memberships(couple_id,user_id,slot) values('10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000051',1),('10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000052',2);
+insert into public.albums(id,couple_id,creator_id,title) values('20000000-0000-4000-8000-000000000051','10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000052','Partner album');
+insert into public.photos(id,couple_id,uploader_id,storage_path,event_date,bytes,format,width,height) values('30000000-0000-4000-8000-000000000051','10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000051','test/media-commands.jpg','2024-01-01',100,'image/jpeg',24,16);
+create function pg_temp.mutate(actor uuid,command text,payload jsonb,op uuid default gen_random_uuid()) returns jsonb language sql as $$select public.commit_mutation(actor,command,payload,op,'test',now()+interval '1 day')$$;
+select lives_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000051','photo.update','{"id":"30000000-0000-4000-8000-000000000051","expected_version":1,"description":"Kỷ niệm 💗","event_date":"2024-02-29","album_id":"20000000-0000-4000-8000-000000000051"}')$$,'Uploader may use partner album');
+select is((select description from public.photos),'Kỷ niệm 💗','Unicode metadata persists');
+select is((select version from public.photos),2,'Real edit increments version');
+select throws_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000052','photo.delete','{"id":"30000000-0000-4000-8000-000000000051","expected_version":2}')$$,'P0001','CONFLICT','Partner cannot delete another upload');
+select lives_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000051','photo.update','{"id":"30000000-0000-4000-8000-000000000051","expected_version":2,"description":"Kỷ niệm 💗","event_date":"2024-02-29","album_id":"20000000-0000-4000-8000-000000000051"}')$$,'Unchanged metadata save succeeds');
+select is((select count(*)::integer from public.change_events),1,'No-op emits no extra event');
+select throws_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000051','album.delete','{"id":"20000000-0000-4000-8000-000000000051","expected_version":1}')$$,'P0001','CONFLICT','Only creator deletes album');
+select lives_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000052','album.delete','{"id":"20000000-0000-4000-8000-000000000051","expected_version":1}')$$,'Album creator can delete');
+select is((select state from public.photos),'ready','Deleting album retains photo');
+select ok((select album_id is null from public.photos),'Deleted album leaves photo unassigned');
+select is((select version from public.photos),3,'Detach conflicts with stale photo editors');
+update public.couples set featured_photo_id='30000000-0000-4000-8000-000000000051';
+update public.profiles set avatar_photo_id='30000000-0000-4000-8000-000000000051' where user_id='00000000-0000-4000-8000-000000000051';
+insert into public.memories(id,couple_id,creator_id,title,event_date) values('40000000-0000-4000-8000-000000000051','10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000052','Partner memory','2024-01-01');
+insert into public.memory_photos values('10000000-0000-4000-8000-000000000051','40000000-0000-4000-8000-000000000051','30000000-0000-4000-8000-000000000051',0);
+select pg_temp.mutate('00000000-0000-4000-8000-000000000051','photo.delete','{"id":"30000000-0000-4000-8000-000000000051","expected_version":3}','50000000-0000-4000-8000-000000000051');
+select is((select state from public.photos),'deleting','Photo enters inaccessible tombstone state');
+select ok((select featured_photo_id is null from public.couples),'Featured reference cleared');
+select ok(not exists(select 1 from public.profiles where avatar_photo_id is not null),'Avatar reference cleared');
+select is((select count(*)::integer from public.memory_photos),0,'Memory associations cleared');
+select is((select version from public.memories),2,'Reference cleanup invalidates stale memory edits');
+select pg_temp.mutate('00000000-0000-4000-8000-000000000051','photo.delete','{"id":"30000000-0000-4000-8000-000000000051","expected_version":3}','50000000-0000-4000-8000-000000000051');
+select is((select count(*)::integer from public.change_events),3,'Exact deletion retry emits once');
+select throws_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000051','photo.update','{"id":"30000000-0000-4000-8000-000000000051","expected_version":4,"description":"revive","event_date":"2024-01-01","album_id":null}')$$,'P0001','CONFLICT','Deleting photo cannot be revived');
+
+-- Memory attachment changes share the existing receipt/event transaction and version rules.
+insert into public.photos(id,couple_id,uploader_id,storage_path,event_date,bytes,format,width,height) values('30000000-0000-4000-8000-000000000052','10000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000052','test/partner-attachment.jpg','2024-01-01',100,'image/jpeg',24,16);
+create temporary table linked_memory as select pg_temp.mutate('00000000-0000-4000-8000-000000000051','memory.create','{"title":"Linked","description":"","event_date":"2024-01-01","photo_ids":["30000000-0000-4000-8000-000000000052"]}') result;
+select is((select count(*)::integer from public.memory_photos),1,'Memory author may reference partner ready photo');
+select pg_temp.mutate('00000000-0000-4000-8000-000000000051','memory.update',jsonb_build_object('id',(select result->>'id' from linked_memory),'expected_version',1,'title','Linked','description','','event_date','2024-01-01','photo_ids','[]'::jsonb));
+select is((select version from public.memories where id=(select (result->>'id')::uuid from linked_memory)),2,'Photo-only edit increments memory version');
+select is((select count(*)::integer from public.memory_photos),0,'Photo-only edit detaches without deleting gallery photo');
+select is((select count(*)::integer from public.change_events where resource_id=(select (result->>'id')::uuid from linked_memory)),2,'Photo-only edit emits one event');
+select pg_temp.mutate('00000000-0000-4000-8000-000000000051','memory.update',jsonb_build_object('id',(select result->>'id' from linked_memory),'expected_version',2,'title','Linked','description','','event_date','2024-01-01','photo_ids','[]'::jsonb));
+select is((select version from public.memories where id=(select (result->>'id')::uuid from linked_memory)),2,'Unchanged attachment save stays no-op');
+select throws_ok($$select pg_temp.mutate('00000000-0000-4000-8000-000000000051','memory.create','{"title":"Invalid reference","description":"","event_date":"2024-01-01","photo_ids":["30000000-0000-4000-8000-000000000051"]}')$$,'P0001','INVALID_REFERENCE','Deleting image cannot be attached');
+
+select * from finish();rollback;

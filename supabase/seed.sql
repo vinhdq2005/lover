@@ -1,0 +1,2 @@
+-- Schema-only replay runs without seeds. Auth identities are provisioned by isolated test helpers.
+-- No real identities, relationship content or production credentials belong here.

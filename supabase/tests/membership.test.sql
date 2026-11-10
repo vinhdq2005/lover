@@ -1,0 +1,21 @@
+begin;
+-- Isolate fixtures transactionally; rollback restores existing LOCAL test data.
+truncate public.couples, public.profiles, public.operation_receipts cascade;
+set local search_path=public,extensions;
+select plan(8);
+select has_function('public','commit_enrollment',array['uuid','text','jsonb','uuid','text','timestamp with time zone','text'],'Trusted enrollment commit exists');
+select has_function('public','bootstrap_operator',array['uuid'],'Operator bootstrap exists');
+select ok(not has_table_privilege('anon','public.couples','SELECT'),'No public couple read');
+select ok(not has_table_privilege('authenticated','public.invitations','SELECT'),'Invitation hash and target are not generally readable');
+insert into auth.users(id,email,email_confirmed_at) values('00000000-0000-4000-8000-000000000001','sql-first@example.test',now()),('00000000-0000-4000-8000-000000000002','sql-partner@example.test',now()),('00000000-0000-4000-8000-000000000003','sql-outsider@example.test',now());
+insert into public.profiles(user_id,display_name) values('00000000-0000-4000-8000-000000000001','First');
+insert into public.couples(id,name,start_date) values('10000000-0000-4000-8000-000000000001','Test','2024-01-01');
+insert into public.memberships(couple_id,user_id,slot) values('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',1);
+insert into public.invitations(id,couple_id,issuer_id,recipient_email,token_hash,expires_at) values('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','sql-partner@example.test',encode(extensions.digest('test-invitation-token','sha256'),'hex'),now()-interval '1 minute');
+select throws_ok($$select public.commit_enrollment('00000000-0000-4000-8000-000000000002','invitation.accept','{"token":"test-invitation-token"}',gen_random_uuid(),'hash',now()+interval '1 day',null)$$,'P0001','ACCESS_DENIED','Expired invitation denied');
+update public.invitations set expires_at=now()+interval '1 day';
+select throws_ok($$select public.commit_enrollment('00000000-0000-4000-8000-000000000003','invitation.accept','{"token":"test-invitation-token"}',gen_random_uuid(),'hash',now()+interval '1 day',null)$$,'P0001','ACCESS_DENIED','Wrong recipient denied');
+update public.invitations set state='revoked';
+select throws_ok($$select public.commit_enrollment('00000000-0000-4000-8000-000000000002','invitation.accept','{"token":"test-invitation-token"}',gen_random_uuid(),'hash',now()+interval '1 day',null)$$,'P0001','ACCESS_DENIED','Revoked invitation denied');
+select is((select count(*)::integer from public.memberships),1,'Failed joins never change membership');
+select * from finish();rollback;
